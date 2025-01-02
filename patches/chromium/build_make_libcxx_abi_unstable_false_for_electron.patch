@@ -1,0 +1,21 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Charles Kerr <charles@charleskerr.com>
+Date: Tue, 22 Mar 2022 16:24:44 -0500
+Subject: build: make libcxx_abi_unstable false for electron
+
+https://nornagon.medium.com/a-libc-odyssey-973e51649063
+
+diff --git a/buildtools/third_party/libc++/__config_site b/buildtools/third_party/libc++/__config_site
+index de3aaa04f1e2a9081ae821b964b49414cb98b375..f9726605ac2bc9bedac46480d270cd54897cbd1f 100644
+--- a/buildtools/third_party/libc++/__config_site
++++ b/buildtools/third_party/libc++/__config_site
+@@ -13,7 +13,9 @@
+ //    _LIBCPP_ABI_NAMESPACE to a shorter value.
+ #define _LIBCPP_ABI_NAMESPACE __Cr
+ 
++#if 0
+ #define _LIBCPP_ABI_VERSION 2
++#endif
+ 
+ /* #undef _LIBCPP_ABI_FORCE_ITANIUM */
+ /* #undef _LIBCPP_ABI_FORCE_MICROSOFT */
