@@ -1,0 +1,95 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Andy Locascio <andy@slack-corp.com>
+Date: Wed, 13 May 2020 14:54:39 -0700
+Subject: refactor: expose cursor changes to the WebContentsObserver
+
+Chrome moved the SetCursor IPC message to mojo, which we use to tell OSR about `cursor-changed`.
+
+Refs: https://chromium-review.googlesource.com/c/chromium/src/+/2172779
+
+diff --git a/content/browser/renderer_host/render_widget_host_delegate.h b/content/browser/renderer_host/render_widget_host_delegate.h
+index c4255d8dfc2e3c4f1f32506e4e9edbb90a74340a..142398a8adafc94e6724ee750b612a66d23d724b 100644
+--- a/content/browser/renderer_host/render_widget_host_delegate.h
++++ b/content/browser/renderer_host/render_widget_host_delegate.h
+@@ -23,6 +23,7 @@
+ #include "third_party/blink/public/mojom/input/input_handler.mojom-shared.h"
+ #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
+ #include "ui/base/ui_base_types.h"
++#include "ui/base/cursor/cursor.h"
+ #include "ui/gfx/native_widget_types.h"
+ 
+ namespace blink {
+@@ -265,6 +266,9 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
+   // Returns the associated RenderViewHostDelegateView*, if possible.
+   virtual RenderViewHostDelegateView* GetDelegateView();
+ 
++  // Notify the delegate of the RenderWidget's changing cursor.
++  virtual void OnCursorChanged(const ui::Cursor& cursor) {}
++
+   // Returns true if the provided RenderWidgetHostImpl matches the current
+   // RenderWidgetHost on the primary main frame, and false otherwise.
+   virtual bool IsWidgetForPrimaryMainFrame(RenderWidgetHostImpl*);
+diff --git a/content/browser/renderer_host/render_widget_host_impl.cc b/content/browser/renderer_host/render_widget_host_impl.cc
+index f15ba3475d6733bf33f1d3d243773928c29dd776..6e1cf587c7cd1b406b8f6488f4a7f309476f11a8 100644
+--- a/content/browser/renderer_host/render_widget_host_impl.cc
++++ b/content/browser/renderer_host/render_widget_host_impl.cc
+@@ -2141,6 +2141,9 @@ void RenderWidgetHostImpl::SetCursor(const ui::Cursor& cursor) {
+   if (view_) {
+     view_->UpdateCursor(cursor);
+   }
++  if (delegate_) {
++    delegate_->OnCursorChanged(cursor);
++  }
+ }
+ 
+ void RenderWidgetHostImpl::ShowContextMenuAtPoint(
+diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
+index 38b5a462873a48d37ea11b1a3d41da46ef63284a..038cef59809065f0a775e1a0282bfeb9f31a4551 100644
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -5109,6 +5109,11 @@ TextInputManager* WebContentsImpl::GetTextInputManager() {
+   return text_input_manager_.get();
+ }
+ 
++void WebContentsImpl::OnCursorChanged(const ui::Cursor& cursor) {
++  observers_.NotifyObservers(&WebContentsObserver::OnCursorChanged,
++                             cursor);
++}
++
+ bool WebContentsImpl::IsWidgetForPrimaryMainFrame(
+     RenderWidgetHostImpl* render_widget_host) {
+   return render_widget_host == GetPrimaryMainFrame()->GetRenderWidgetHost();
+diff --git a/content/browser/web_contents/web_contents_impl.h b/content/browser/web_contents/web_contents_impl.h
+index 3ba96d4aede6844ac358074e145ae89373bb06d2..dcce544ee23fe7fe9ce0c6b1c89840aedb514f5f 100644
+--- a/content/browser/web_contents/web_contents_impl.h
++++ b/content/browser/web_contents/web_contents_impl.h
+@@ -1011,6 +1011,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
+   void SendScreenRects() override;
+   void SendActiveState(bool active) override;
+   TextInputManager* GetTextInputManager() override;
++  void OnCursorChanged(const ui::Cursor& cursor) override;
+   bool IsWidgetForPrimaryMainFrame(
+       RenderWidgetHostImpl* render_widget_host) override;
+   bool IsShowingContextMenuOnPage() const override;
+diff --git a/content/public/browser/web_contents_observer.h b/content/public/browser/web_contents_observer.h
+index a3b5e3b1ad2dfc01ac500ac5cd02b33c3b866437..b8ca4c6aabe1a872fdcf7cf2ede2193ab1793f39 100644
+--- a/content/public/browser/web_contents_observer.h
++++ b/content/public/browser/web_contents_observer.h
+@@ -32,6 +32,7 @@
+ #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-forward.h"
+ #include "third_party/blink/public/mojom/media/capture_handle_config.mojom-forward.h"
+ #include "third_party/skia/include/core/SkColor.h"
++#include "ui/base/cursor/cursor.h"
+ #include "ui/base/page_transition_types.h"
+ #include "ui/base/window_open_disposition.h"
+ 
+@@ -568,6 +569,9 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
+   // Invoked when the primary main frame changes size.
+   virtual void PrimaryMainFrameWasResized(bool width_changed) {}
+ 
++  // Invoked every time the RenderWidget's cursor changes.
++  virtual void OnCursorChanged(const ui::Cursor& cursor) {}
++
+   // Invoked when the given frame changes its window.name property.
+   virtual void FrameNameChanged(RenderFrameHost* render_frame_host,
+                                 const std::string& name) {}
