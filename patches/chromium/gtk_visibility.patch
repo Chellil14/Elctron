@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jeremy Apthorp <nornagon@nornagon.net>
+Date: Thu, 20 Sep 2018 17:48:38 -0700
+Subject: gtk_visibility.patch
+
+Allow electron to depend on GTK in the GN build.
+
+diff --git a/build/config/linux/gtk/BUILD.gn b/build/config/linux/gtk/BUILD.gn
+index 1ea983ca1f613a9a5b12375196fbf6a61960c90f..38d7d54ce7715ebe4e3b25e08c57d29f3be2cba8 100644
+--- a/build/config/linux/gtk/BUILD.gn
++++ b/build/config/linux/gtk/BUILD.gn
+@@ -27,6 +27,7 @@ pkg_config("gtk_internal_config") {
+ 
+ group("gtk") {
+   visibility = [
++    "//electron:*",
+     # These are allow-listed for WebRTC builds.  Nothing in else should depend
+     # on GTK.
+     "//examples:peerconnection_client",
+diff --git a/ui/ozone/platform/x11/BUILD.gn b/ui/ozone/platform/x11/BUILD.gn
+index 1307b3375f4f42f31b90393f65f169b6b0fe10ed..06b2940ad5f23e5c7c8e99b8922e89a799079259 100644
+--- a/ui/ozone/platform/x11/BUILD.gn
++++ b/ui/ozone/platform/x11/BUILD.gn
+@@ -6,7 +6,7 @@ import("//build/config/chromeos/ui_mode.gni")
+ import("//gpu/vulkan/features.gni")
+ import("//ui/base/ui_features.gni")
+ 
+-visibility = [ "//ui/ozone/*" ]
++visibility = [ "//ui/ozone/*", "//electron:*" ]
+ 
+ assert(is_linux || is_chromeos)
+ 
