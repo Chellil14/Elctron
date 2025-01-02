@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Cheng Zhao <zcbenz@gmail.com>
+Date: Thu, 20 Sep 2018 17:45:47 -0700
+Subject: disable_hidden.patch
+
+Electron uses this to disable background throttling for hidden windows.
+
+diff --git a/content/browser/renderer_host/render_widget_host_impl.cc b/content/browser/renderer_host/render_widget_host_impl.cc
+index fb013badaeaf5eac23b1468301476228f6dc1782..6c0fe34bb30f68d43e1e111d1f4bf24e7a3281e5 100644
+--- a/content/browser/renderer_host/render_widget_host_impl.cc
++++ b/content/browser/renderer_host/render_widget_host_impl.cc
+@@ -777,6 +777,9 @@ void RenderWidgetHostImpl::WasHidden() {
+     return;
+   }
+ 
++  if (disable_hidden_)
++    return;
++
+   RejectPointerLockOrUnlockIfNecessary(
+       blink::mojom::PointerLockResult::kWrongDocument);
+ 
+diff --git a/content/browser/renderer_host/render_widget_host_impl.h b/content/browser/renderer_host/render_widget_host_impl.h
+index 8e0d92a74d31758bb813b26ab906e80b5026a9ba..3365a20260fc6c489688a8647b0eea8649d06ddf 100644
+--- a/content/browser/renderer_host/render_widget_host_impl.h
++++ b/content/browser/renderer_host/render_widget_host_impl.h
+@@ -996,6 +996,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl
+   // Requests a commit and forced redraw in the renderer compositor.
+   void ForceRedrawForTesting();
+ 
++  // Electron: Prevents the widget from getting hidden.
++  bool disable_hidden_ = false;
++
+  protected:
+   // |routing_id| must not be MSG_ROUTING_NONE.
+   // If this object outlives |delegate|, DetachDelegate() must be called when
+diff --git a/content/browser/renderer_host/render_widget_host_view_aura.cc b/content/browser/renderer_host/render_widget_host_view_aura.cc
+index eb65b0b002dfd2ba820e7823ad7338cfa2f40c4c..41ed2610ae5bdfdc9b3f1e47df58140c71bff790 100644
+--- a/content/browser/renderer_host/render_widget_host_view_aura.cc
++++ b/content/browser/renderer_host/render_widget_host_view_aura.cc
+@@ -634,7 +634,7 @@ void RenderWidgetHostViewAura::HideImpl() {
+   CHECK(visibility_ == Visibility::HIDDEN ||
+         visibility_ == Visibility::OCCLUDED);
+ 
+-  if (!host()->is_hidden()) {
++  if (!host()->is_hidden() && !host()->disable_hidden_) {
+     host()->WasHidden();
+     aura::WindowTreeHost* host = window_->GetHost();
+       aura::Window* parent = window_->parent();
