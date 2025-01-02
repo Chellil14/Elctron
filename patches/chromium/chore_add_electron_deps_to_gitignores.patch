@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Samuel Attard <sattard@salesforce.com>
+Date: Tue, 26 Jul 2022 00:05:29 -0700
+Subject: chore: add electron deps to gitignores
+
+Makes things like "git status" quicker when developing electron locally
+
+diff --git a/.gitignore b/.gitignore
+index 22417f27125a44d481483439066d73e60348b414..82e5084b0e12231e5cc96a38d99b7238ebd0565c 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -210,6 +210,7 @@ vs-chromium-project.txt
+ /data
+ /delegate_execute
+ /device/serial/device_serial_mojo.xml
++/electron
+ /google_apis/gcm/gcm.xml
+ /googleurl
+ /gpu/gles2_conform_test
+diff --git a/third_party/.gitignore b/third_party/.gitignore
+index 5cd5dda2f903662cc470d445fc39837aea0b821d..df0499538b4de6d14afd33d3c1c03d3d70c6c100 100644
+--- a/third_party/.gitignore
++++ b/third_party/.gitignore
+@@ -96,6 +96,7 @@
+ /directxsdk
+ /dom_distiller_js/dist
+ /eigen3/src
++/electron_node
+ /elfutils/src
+ /emoji-metadata/src
+ /emoji-segmenter/src
+@@ -212,6 +213,7 @@
+ /mocha
+ /mockito/src
+ /nacl_sdk_binaries/
++/nan
+ /nasm
+ /nearby/src
+ /neon_2_sse/src
+@@ -280,6 +282,7 @@
+ /speex
+ /sqlite/src
+ /sqlite4java/lib/
++/squirrel.mac
+ /subresource-filter-ruleset/data/UnindexedRules
+ /swift-format
+ /swift-toolchain
