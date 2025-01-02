@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: John Kleinschmidt <jkleinsc@electronjs.org>
+Date: Thu, 6 Jun 2024 16:19:05 -0400
+Subject: chore: remove reference to //chrome/browser/themes
+
+5573603: Modularize //chrome/browser/themes introduced dependencies
+on chrome\browser\extensions\extension_service.cc which broke the
+Windows build.  Since we don't use Chromium custom themes we do
+not need this dependency.
+
+refs https://chromium-review.googlesource.com/c/chromium/src/+/5573603
+
+diff --git a/chrome/browser/ui/color/BUILD.gn b/chrome/browser/ui/color/BUILD.gn
+index 9d3db1e12d5f7a888879e6d2b0c67f49c1bd0be8..13f048055e1b8de14f6066f2567f60eed67cd16d 100644
+--- a/chrome/browser/ui/color/BUILD.gn
++++ b/chrome/browser/ui/color/BUILD.gn
+@@ -89,9 +89,6 @@ source_set("mixers") {
+     ]
+   }
+ 
+-  if (is_chromeos || is_linux || is_mac || is_win) {
+-    deps += [ "//chrome/browser/themes" ]
+-  }
+ }
+ 
+ if (!is_ios && !is_android) {
