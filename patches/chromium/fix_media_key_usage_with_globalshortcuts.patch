@@ -1,0 +1,98 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shelley Vohr <shelley.vohr@gmail.com>
+Date: Mon, 16 Aug 2021 17:55:32 +0200
+Subject: fix: media key usage with globalShortcuts
+
+This patch enables media keys to work properly with Electron's globalShortcut
+module. Chromium's default usage of RemoteCommandCenterDelegate on macOS falls
+down into MPRemoteCommandCenter, which makes it such that an app will not
+receive remote control events until it begins playing audio. This runs
+counter to the design of globalShortcuts, and so we need to instead
+use `ui::MediaKeysListener`.
+
+diff --git a/chrome/browser/extensions/global_shortcut_listener.cc b/chrome/browser/extensions/global_shortcut_listener.cc
+index 91226bd6e383636ecebdac93b151e107b3f943d9..7fe79f49484b50d2ae9a8d5d0ba9749c62464378 100644
+--- a/chrome/browser/extensions/global_shortcut_listener.cc
++++ b/chrome/browser/extensions/global_shortcut_listener.cc
+@@ -8,6 +8,7 @@
+ #include "base/not_fatal_until.h"
+ #include "base/notreached.h"
+ #include "content/public/browser/browser_thread.h"
++#include "content/public/browser/media_keys_listener_manager.h"
+ #include "ui/base/accelerators/accelerator.h"
+ 
+ using content::BrowserThread;
+@@ -67,6 +68,22 @@ void GlobalShortcutListener::UnregisterAccelerator(
+     StopListening();
+ }
+ 
++// static
++void GlobalShortcutListener::SetShouldUseInternalMediaKeyHandling(bool should_use) {
++  if (content::MediaKeysListenerManager::
++            IsMediaKeysListenerManagerEnabled()) {
++    content::MediaKeysListenerManager* media_keys_listener_manager =
++        content::MediaKeysListenerManager::GetInstance();
++    DCHECK(media_keys_listener_manager);
++
++    if (should_use) {
++      media_keys_listener_manager->EnableInternalMediaKeyHandling();
++    } else {
++      media_keys_listener_manager->DisableInternalMediaKeyHandling();
++    }
++  }
++}
++
+ void GlobalShortcutListener::UnregisterAccelerators(Observer* observer) {
+   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+   if (IsShortcutHandlingSuspended())
+diff --git a/chrome/browser/extensions/global_shortcut_listener.h b/chrome/browser/extensions/global_shortcut_listener.h
+index 06e65da05a218a8ecc641bbd749ace2b0832ce72..370dfdc9579a9e6b3a6bdc6f4526650a32f53b55 100644
+--- a/chrome/browser/extensions/global_shortcut_listener.h
++++ b/chrome/browser/extensions/global_shortcut_listener.h
+@@ -34,6 +34,8 @@ class GlobalShortcutListener {
+ 
+   static GlobalShortcutListener* GetInstance();
+ 
++  static void SetShouldUseInternalMediaKeyHandling(bool should_use);
++
+   // Register an observer for when a certain |accelerator| is struck. Returns
+   // true if register successfully, or false if 1) the specificied |accelerator|
+   // has been registered by another caller or other native applications, or
+diff --git a/content/browser/media/media_keys_listener_manager_impl.cc b/content/browser/media/media_keys_listener_manager_impl.cc
+index b447847dc16ed4ddc8db14474fa24d880429b3c7..e72cab48bc1a60dc1c1a1a4c97e1be7d15bfb261 100644
+--- a/content/browser/media/media_keys_listener_manager_impl.cc
++++ b/content/browser/media/media_keys_listener_manager_impl.cc
+@@ -88,7 +88,11 @@ bool MediaKeysListenerManagerImpl::StartWatchingMediaKey(
+       CanActiveMediaSessionControllerReceiveEvents();
+ 
+   // Tell the underlying MediaKeysListener to listen for the key.
+-  if (should_start_watching && media_keys_listener_ &&
++  if (
++#if BUILDFLAG(IS_MAC)
++      !media_key_handling_enabled_ &&
++#endif  // BUILDFLAG(IS_MAC)
++      should_start_watching && media_keys_listener_ &&
+       !media_keys_listener_->StartWatchingMediaKey(key_code)) {
+     return false;
+   }
+@@ -362,6 +366,20 @@ void MediaKeysListenerManagerImpl::StartListeningForMediaKeysIfNecessary() {
+         this, ui::MediaKeysListener::Scope::kGlobal);
+     DCHECK(media_keys_listener_);
+   }
++
++#if BUILDFLAG(IS_MAC)
++  // Chromium's implementation of SystemMediaControls falls
++  // down into MPRemoteCommandCenter, which makes it such that an app will not
++  // will not receive remote control events until it begins playing audio.
++  // If there's not already a MediaKeysListener instance, create one so
++  // that globalShortcuts work correctly.
++  if (!media_keys_listener_) {
++    media_keys_listener_ = ui::MediaKeysListener::Create(
++        this, ui::MediaKeysListener::Scope::kGlobal);
++    DCHECK(media_keys_listener_);
++  }
++#endif
++
+   EnsureAuxiliaryServices();
+ }
+ 
