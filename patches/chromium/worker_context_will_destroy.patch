@@ -1,0 +1,85 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Cheng Zhao <zcbenz@gmail.com>
+Date: Thu, 20 Sep 2018 17:47:12 -0700
+Subject: worker_context_will_destroy.patch
+
+This adds a hook for worker context destruction, which we use in Electron to
+shutdown node integration in the worker if relevant.
+
+An attempt to upstream this was made, but rejected:
+https://chromium-review.googlesource.com/c/chromium/src/+/1954347
+
+diff --git a/content/public/renderer/content_renderer_client.h b/content/public/renderer/content_renderer_client.h
+index 784e0a5166d6bece3f6a251e7cab1192e576af22..efd8ef49f1f2b6ecd6c3638b56e40c4e418f3493 100644
+--- a/content/public/renderer/content_renderer_client.h
++++ b/content/public/renderer/content_renderer_client.h
+@@ -414,6 +414,11 @@ class CONTENT_EXPORT ContentRendererClient {
+   virtual void DidInitializeWorkerContextOnWorkerThread(
+       v8::Local<v8::Context> context) {}
+ 
++  // Notifies that a worker context will be destroyed. This function is called
++  // from the worker thread.
++  virtual void WillDestroyWorkerContextOnWorkerThread(
++      v8::Local<v8::Context> context) {}
++
+   // Overwrites the given URL to use an HTML5 embed if possible.
+   // An empty URL is returned if the URL is not overriden.
+   virtual GURL OverrideFlashEmbedWithHTML(const GURL& url);
+diff --git a/content/renderer/renderer_blink_platform_impl.cc b/content/renderer/renderer_blink_platform_impl.cc
+index 8ad54eacf1ec5ff94d3f85484cce9c80103ce3d4..7490df0c5fa6a0f3b292a130f1930f537ac186a3 100644
+--- a/content/renderer/renderer_blink_platform_impl.cc
++++ b/content/renderer/renderer_blink_platform_impl.cc
+@@ -902,6 +902,12 @@ void RendererBlinkPlatformImpl::WillStopWorkerThread() {
+   WorkerThreadRegistry::Instance()->WillStopCurrentWorkerThread();
+ }
+ 
++void RendererBlinkPlatformImpl::WorkerContextWillDestroy(
++    const v8::Local<v8::Context>& worker) {
++  GetContentClient()->renderer()->WillDestroyWorkerContextOnWorkerThread(
++      worker);
++}
++
+ void RendererBlinkPlatformImpl::WorkerContextCreated(
+     const v8::Local<v8::Context>& worker) {
+   GetContentClient()->renderer()->DidInitializeWorkerContextOnWorkerThread(
+diff --git a/content/renderer/renderer_blink_platform_impl.h b/content/renderer/renderer_blink_platform_impl.h
+index b2eae6bcf84a68f60ad00f5a84a7bcda42b6c7aa..4514bae97793815bc5ae0e94819253f7b5374116 100644
+--- a/content/renderer/renderer_blink_platform_impl.h
++++ b/content/renderer/renderer_blink_platform_impl.h
+@@ -197,6 +197,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
+   void DidStartWorkerThread() override;
+   void WillStopWorkerThread() override;
+   void WorkerContextCreated(const v8::Local<v8::Context>& worker) override;
++  void WorkerContextWillDestroy(const v8::Local<v8::Context>& worker) override;
+   bool AllowScriptExtensionForServiceWorker(
+       const blink::WebSecurityOrigin& script_origin) override;
+   blink::ProtocolHandlerSecurityLevel GetProtocolHandlerSecurityLevel(
+diff --git a/third_party/blink/public/platform/platform.h b/third_party/blink/public/platform/platform.h
+index cbc11108212e72e569503f3b1a746b37e4305274..2b8bb13dda4c66d9b7e16a5faf779083b19f0b7d 100644
+--- a/third_party/blink/public/platform/platform.h
++++ b/third_party/blink/public/platform/platform.h
+@@ -670,6 +670,7 @@ class BLINK_PLATFORM_EXPORT Platform {
+   virtual void DidStartWorkerThread() {}
+   virtual void WillStopWorkerThread() {}
+   virtual void WorkerContextCreated(const v8::Local<v8::Context>& worker) {}
++  virtual void WorkerContextWillDestroy(const v8::Local<v8::Context>& worker) {}
+   virtual bool AllowScriptExtensionForServiceWorker(
+       const WebSecurityOrigin& script_origin) {
+     return false;
+diff --git a/third_party/blink/renderer/core/workers/worker_thread.cc b/third_party/blink/renderer/core/workers/worker_thread.cc
+index 9866cc85f4d2c9d834538010f8b1ca64efc701b9..5af206ddc527f7d7cf44b6c363d2ede08a36ff55 100644
+--- a/third_party/blink/renderer/core/workers/worker_thread.cc
++++ b/third_party/blink/renderer/core/workers/worker_thread.cc
+@@ -764,6 +764,12 @@ void WorkerThread::PrepareForShutdownOnWorkerThread() {
+   }
+   pause_handle_.reset();
+ 
++  {
++    v8::HandleScope handle_scope(GetIsolate());
++    Platform::Current()->WorkerContextWillDestroy(
++        GlobalScope()->ScriptController()->GetContext());
++  }
++
+   if (WorkerThreadDebugger* debugger = WorkerThreadDebugger::From(GetIsolate()))
+     debugger->WorkerThreadDestroyed(this);
+ 
