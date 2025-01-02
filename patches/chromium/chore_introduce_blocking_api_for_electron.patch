@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: deepak1556 <hop2deep@gmail.com>
+Date: Tue, 15 Nov 2022 21:45:28 +0900
+Subject: chore: introduce blocking api for //electron
+
+This patch comes after Chromium removed the ScopedAllowIO API in favor
+of explicitly adding ScopedAllowBlocking calls as friends.
+
+diff --git a/base/threading/thread_restrictions.h b/base/threading/thread_restrictions.h
+index e251578d1ec49dbc9f8855b405767e6df7117454..b73cccdee96d751392ea6d7ee22d55d0b956ac24 100644
+--- a/base/threading/thread_restrictions.h
++++ b/base/threading/thread_restrictions.h
+@@ -129,6 +129,7 @@ class FirefoxProfileLock;
+ class KeyStorageLinux;
+ class NativeBackendKWallet;
+ class NativeDesktopMediaList;
++class ProcessSingleton;
+ class Profile;
+ class ProfileImpl;
+ class StartupTabProviderImpl;
+@@ -261,6 +262,9 @@ class BackendImpl;
+ class InFlightIO;
+ bool CleanupDirectorySync(const base::FilePath&);
+ }  // namespace disk_cache
++namespace electron {
++class ScopedAllowBlockingForElectron;
++}  // namespace electron
+ namespace enterprise_connectors {
+ class LinuxKeyRotationCommand;
+ }  // namespace enterprise_connectors
+@@ -546,6 +550,7 @@ class BASE_EXPORT ScopedAllowBlocking {
+   friend class ::DesktopNotificationBalloon;
+   friend class ::FirefoxProfileLock;
+   friend class ::GaiaConfig;
++  friend class ::ProcessSingleton;
+   friend class ::ProfileImpl;
+   friend class ::ScopedAllowBlockingForProfile;
+   friend class ::StartupTabProviderImpl;
+@@ -586,6 +591,7 @@ class BASE_EXPORT ScopedAllowBlocking {
+   friend class crosapi::LacrosThreadTypeDelegate;
+   friend class crypto::ScopedAllowBlockingForNSS;  // http://crbug.com/59847
+   friend class drive::FakeDriveService;
++  friend class electron::ScopedAllowBlockingForElectron;
+   friend class extensions::InstalledLoader;
+   friend class extensions::UnpackedInstaller;
+   friend class font_service::internal::MappedFontFile;
