@@ -1,0 +1,13 @@
+fix_integer_overflow_in_blocklayoutencoder.patch
+cherry-pick-bdffa0ea5148.patch
+cherry-pick-05e69c75905f.patch
+cherry-pick-891020ed64d4.patch
+cherry-pick-2b98abd8cb6c.patch
+cherry-pick-cc44ae61f37b.patch
+m98_vulkan_fix_vkcmdresolveimage_extents.patch
+m98_vulkan_fix_vkcmdresolveimage_offsets.patch
+cherry-pick-49e8ff16f1fe.patch
+m99_vulkan_prevent_out_of_bounds_read_in_divisor_emulation_path.patch
+m99_vulkan_streamvertexdatawithdivisor_write_beyond_buffer_boundary.patch
+m98_protect_against_deleting_a_current_xfb_buffer.patch
+m96-lts_vulkan_fix_issue_with_redefining_a_layered_attachment.patch

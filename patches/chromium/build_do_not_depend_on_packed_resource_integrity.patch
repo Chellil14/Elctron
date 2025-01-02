@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Samuel Attard <sattard@slack-corp.com>
+Date: Thu, 27 May 2021 17:21:07 -0700
+Subject: build: do not depend on packed_resource_integrity
+
+This ensures we do not depend on a target that does not exist when
+building Electron, electron generates its own .pak files via
+electron_repack and therefore this integrity target which is generated
+by the chrome_paks target does not exist.  This can not be upstreamed,
+if we ever align our .pak file generation with Chrome we can remove this
+patch.
+
+diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
+index e7dda63b94aebaf45cf25af0bc101698d44fc44b..feb624f77466de6bf1ea398dc8274231dac432fa 100644
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -164,11 +164,16 @@ if (!is_android && !is_mac) {
+         "common/crash_keys.h",
+       ]
+ 
++      if (!is_electron_build) {
++        deps += [
++          ":packed_resources_integrity",
++        ]
++      }
++
+       deps += [
+         ":chrome_dll",
+         ":chrome_exe_version",
+         ":copy_first_run",
+-        ":packed_resources_integrity",
+         ":visual_elements_resources",
+         "//base",
+         "//build:branding_buildflags",
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 17e03f58263b5254cec991386536286de3b41600..65fdfcec6894249996fa12b9471362475620cfd7 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -4306,7 +4306,7 @@ static_library("browser") {
+ 
+     # On Windows, the hashes are embedded in //chrome:chrome_initial rather
+     # than here in :chrome_dll.
+-    if (!is_win) {
++    if (!is_win && !is_electron_build) {
+       deps += [ "//chrome:packed_resources_integrity" ]
+     }
+ 
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 139a04d6cbc1376340cf73a395e051fd2c7c9b11..73f0b275da7fef57f6c9956a16b5370f6771feac 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -5281,7 +5281,6 @@ test("unit_tests") {
+     assert(toolkit_views)
+     sources += [ "../browser/ui/startup/credential_provider_signin_info_fetcher_win_unittest.cc" ]
+     deps += [
+-      "//chrome:packed_resources_integrity",
+       "//chrome/browser:chrome_process_finder",
+       "//chrome/browser/safe_browsing/chrome_cleaner",
+       "//chrome/browser/safe_browsing/chrome_cleaner:public",
+@@ -5294,6 +5293,12 @@ test("unit_tests") {
+       "//components/chrome_cleaner/public/proto",
+       "//ui/events/devices:test_support",
+     ]
++
++    if (!is_electron_build) {
++      deps += [
++        "//chrome:packed_resources_integrity",
++      ]
++    }
+   }
+ 
+   if (is_win || is_chromeos_ash || is_mac) {
+@@ -5858,7 +5863,6 @@ test("unit_tests") {
+     }
+ 
+     deps += [
+-      "//chrome:packed_resources_integrity_hash",
+       "//chrome/browser:cart_db_content_proto",
+       "//chrome/browser/media/router:test_support",
+       "//chrome/browser/promo_browser_command:mojo_bindings",
+@@ -5893,6 +5897,9 @@ test("unit_tests") {
+       "//ui/color:test_support",
+       "//ui/native_theme:test_support",
+     ]
++    if (!is_electron_build) {
++      deps += [ "//chrome:packed_resources_integrity_hash" ]
++    }
+     if (is_win) {
+       deps += [ "//components/chrome_cleaner/public/proto:test_only_proto" ]
+     }
