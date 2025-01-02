@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Henri Torgemane <henrit@gmail.com>
+Date: Thu, 23 Sep 2021 21:30:33 -0500
+Subject: add ui::ScopedCliboardWriter::WriteUnsafeRawData
+
+This restores some ability to write to the clipboard using raw formats, which
+was removed as part of the Raw Clipboard API scrubbing.
+https://bugs.chromium.org/p/chromium/issues/detail?id=1217643
+
+diff --git a/ui/base/clipboard/scoped_clipboard_writer.cc b/ui/base/clipboard/scoped_clipboard_writer.cc
+index 28df49366e87d17c831b8f941e30faa19cf36626..d68c58edeb6abec865f6ad051e5da2c0bdc7981d 100644
+--- a/ui/base/clipboard/scoped_clipboard_writer.cc
++++ b/ui/base/clipboard/scoped_clipboard_writer.cc
+@@ -237,6 +237,16 @@ void ScopedClipboardWriter::WriteEncodedDataTransferEndpointForTesting(
+ }
+ #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+ 
++void ScopedClipboardWriter::WriteUnsafeRawData(const std::u16string& format,
++                                               mojo_base::BigBuffer data) {
++  static constexpr int kMaxRegisteredFormats = 100;
++  if (counter_ >= kMaxRegisteredFormats)
++    return;
++  counter_++;
++  platform_representations_.push_back(
++      {base::UTF16ToUTF8(format), std::move(data)});
++}
++
+ void ScopedClipboardWriter::Reset() {
+   objects_.clear();
+   platform_representations_.clear();
+diff --git a/ui/base/clipboard/scoped_clipboard_writer.h b/ui/base/clipboard/scoped_clipboard_writer.h
+index 96ba9abb9b7efab79adbf299c6bd3b4f7a4501e1..0916b81ec5b3cb123185b7cff332120ee498fb57 100644
+--- a/ui/base/clipboard/scoped_clipboard_writer.h
++++ b/ui/base/clipboard/scoped_clipboard_writer.h
+@@ -89,6 +89,10 @@ class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) ScopedClipboardWriter {
+   // This is only used to write custom format data.
+   void WriteData(const std::u16string& format, mojo_base::BigBuffer data);
+ 
++  // write raw (non-pickled) data to the clipboard
++  void WriteUnsafeRawData(const std::u16string& format,
++                          mojo_base::BigBuffer data);
++
+   void WriteImage(const SkBitmap& bitmap);
+ 
+ #if BUILDFLAG(IS_CHROMEOS_LACROS)
