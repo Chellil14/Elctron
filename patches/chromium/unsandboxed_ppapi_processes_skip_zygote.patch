@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jeremy Apthorp <nornagon@nornagon.net>
+Date: Tue, 16 Apr 2019 11:25:08 -0700
+Subject: unsandboxed_ppapi_processes_skip_zygote.patch
+
+Unsandboxed ppapi processes should skip zygote.
+
+diff --git a/content/browser/ppapi_plugin_sandboxed_process_launcher_delegate.cc b/content/browser/ppapi_plugin_sandboxed_process_launcher_delegate.cc
+index f822120af8bf8849609a765d7478fbdba1e50a8b..f928b747d202179636761666ff084a81433a933b 100644
+--- a/content/browser/ppapi_plugin_sandboxed_process_launcher_delegate.cc
++++ b/content/browser/ppapi_plugin_sandboxed_process_launcher_delegate.cc
+@@ -8,6 +8,7 @@
+ #include "build/build_config.h"
+ #include "content/public/common/content_switches.h"
+ #include "sandbox/policy/mojom/sandbox.mojom.h"
++#include "sandbox/policy/switches.h"
+ 
+ #if BUILDFLAG(IS_WIN)
+ #include "base/win/windows_version.h"
+@@ -62,6 +63,9 @@ bool PpapiPluginSandboxedProcessLauncherDelegate::PreSpawnTarget(
+ ZygoteHandle PpapiPluginSandboxedProcessLauncherDelegate::GetZygote() {
+   const base::CommandLine& browser_command_line =
+       *base::CommandLine::ForCurrentProcess();
++  if (browser_command_line.HasSwitch(sandbox::policy::switches::kNoSandbox)) {
++    return nullptr;
++  }
+   base::CommandLine::StringType plugin_launcher =
+       browser_command_line.GetSwitchValueNative(switches::kPpapiPluginLauncher);
+   if (!plugin_launcher.empty())
