@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: deepak1556 <hop2deep@gmail.com>
+Date: Thu, 7 Apr 2022 20:30:16 +0900
+Subject: Make gtk::GetLibGdkPixbuf public
+
+Allows embedders to get a handle to the gdk_pixbuf
+library already loaded in the process.
+
+diff --git a/ui/gtk/gtk_compat.cc b/ui/gtk/gtk_compat.cc
+index d196e304a43191b6dc82f25b0b4bf24d242edb3c..0156ed1c3e8e1de8ce875ca9a17e69358074743e 100644
+--- a/ui/gtk/gtk_compat.cc
++++ b/ui/gtk/gtk_compat.cc
+@@ -66,11 +66,6 @@ void* GetLibGio() {
+   return libgio;
+ }
+ 
+-void* GetLibGdkPixbuf() {
+-  static void* libgdk_pixbuf = DlOpen("libgdk_pixbuf-2.0.so.0");
+-  return libgdk_pixbuf;
+-}
+-
+ void* GetLibGdk3() {
+   static void* libgdk3 = DlOpen("libgdk-3.so.0");
+   return libgdk3;
+@@ -134,6 +129,11 @@ gfx::Insets InsetsFromGtkBorder(const GtkBorder& border) {
+ 
+ }  // namespace
+ 
++void* GetLibGdkPixbuf() {
++  static void* libgdk_pixbuf = DlOpen("libgdk_pixbuf-2.0.so.0");
++  return libgdk_pixbuf;
++}
++
+ bool LoadGtk() {
+   static bool loaded = LoadGtkImpl();
+   return loaded;
+diff --git a/ui/gtk/gtk_compat.h b/ui/gtk/gtk_compat.h
+index 409e385fc952662c9887d9a810bb3c547c5be282..579ac4f6a39654f1e58ed0eb165c2773e5620475 100644
+--- a/ui/gtk/gtk_compat.h
++++ b/ui/gtk/gtk_compat.h
+@@ -40,6 +40,9 @@ using SkColor = uint32_t;
+ 
+ namespace gtk {
+ 
++// Get handle to the currently loaded gdk_pixbuf library in the process.
++void* GetLibGdkPixbuf();
++
+ // Loads libgtk and related libraries and returns true on success.
+ bool LoadGtk();
+ 
