@@ -1,0 +1,76 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Samuel Attard <sattard@slack-corp.com>
+Date: Mon, 26 Aug 2019 14:32:41 -0700
+Subject: feat: add set_theme_source to allow apps to override chromiums
+ internal theme choice
+
+This patch is required as Chromium doesn't currently let folks using
+//ui override the theme choice in NativeTheme.  It defaults to
+respecting the OS theme choice and some apps don't always want to do
+that.  With this patch we can override the theme value that Chromium
+uses internally for things like menus and devtools.
+
+We can remove this patch once it has in some shape been upstreamed.
+
+diff --git a/ui/native_theme/native_theme.cc b/ui/native_theme/native_theme.cc
+index 8f13ff7194c8420038583b9c82ccb8b586d86aac..222f2983d85c2c57017e751919919a03d886c0e5 100644
+--- a/ui/native_theme/native_theme.cc
++++ b/ui/native_theme/native_theme.cc
+@@ -145,6 +145,8 @@ NativeTheme::NativeTheme(bool should_use_dark_colors,
+ NativeTheme::~NativeTheme() = default;
+ 
+ bool NativeTheme::ShouldUseDarkColors() const {
++  if (theme_source() == ThemeSource::kForcedLight) return false;
++  if (theme_source() == ThemeSource::kForcedDark) return true;
+   return should_use_dark_colors_;
+ }
+ 
+diff --git a/ui/native_theme/native_theme.h b/ui/native_theme/native_theme.h
+index 5ee7cd7952f7b956c32e793e251d5b0cb457026a..bc2fac2b97ffbcc4c0b54d1652c37bfb021d5d3d 100644
+--- a/ui/native_theme/native_theme.h
++++ b/ui/native_theme/native_theme.h
+@@ -410,6 +410,23 @@ class NATIVE_THEME_EXPORT NativeTheme {
+           custom_theme,
+       bool use_custom_frame = true) const;
+ 
++
++  enum ThemeSource {
++    kSystem,
++    kForcedDark,
++    kForcedLight,
++  };
++
++  ThemeSource theme_source() const {
++    return theme_source_;
++  }
++
++  void set_theme_source(ThemeSource theme_source) {
++    bool original = ShouldUseDarkColors();
++    theme_source_ = theme_source;
++    if (ShouldUseDarkColors() != original) NotifyOnNativeThemeUpdated();
++  }
++
+   // Returns a shared instance of the native theme that should be used for web
+   // rendering. Do not use it in a normal application context (i.e. browser).
+   // The returned object should not be deleted by the caller. This function is
+@@ -606,6 +623,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
+   PageColors page_colors_ = PageColors::kOff;
+   PreferredColorScheme preferred_color_scheme_ = PreferredColorScheme::kLight;
+   PreferredContrast preferred_contrast_ = PreferredContrast::kNoPreference;
++  ThemeSource theme_source_ = ThemeSource::kSystem;
+ 
+   SEQUENCE_CHECKER(sequence_checker_);
+ };
+diff --git a/ui/native_theme/native_theme_win.cc b/ui/native_theme/native_theme_win.cc
+index 87807be3558a2fdd222241b046718f9f1f0b7858..dcff51e17f5215d62c62141f2b63f26501e59d09 100644
+--- a/ui/native_theme/native_theme_win.cc
++++ b/ui/native_theme/native_theme_win.cc
+@@ -623,6 +623,8 @@ bool NativeThemeWin::ShouldUseDarkColors() const {
+   // ...unless --force-dark-mode was specified in which case caveat emptor.
+   if (InForcedColorsMode() && !IsForcedDarkMode())
+     return false;
++  if (theme_source() == ThemeSource::kForcedLight) return false;
++  if (theme_source() == ThemeSource::kForcedDark) return true;
+   return NativeTheme::ShouldUseDarkColors();
+ }
+ 
