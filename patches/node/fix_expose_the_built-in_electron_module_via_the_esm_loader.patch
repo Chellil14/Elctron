@@ -1,0 +1,103 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Samuel Attard <sattard@salesforce.com>
+Date: Thu, 6 Oct 2022 04:09:16 -0700
+Subject: fix: expose the built-in electron module via the ESM loader
+
+This allows usage of `import { app } from 'electron'` and `import('electron')` natively in the browser + non-sandboxed renderer
+
+diff --git a/lib/internal/modules/esm/get_format.js b/lib/internal/modules/esm/get_format.js
+index 219ef03a21214deb8961044cfc18ef9c1e711b60..7749b37001f869fe565d8c450ff7ca2b6f3faa7a 100644
+--- a/lib/internal/modules/esm/get_format.js
++++ b/lib/internal/modules/esm/get_format.js
+@@ -30,6 +30,7 @@ const protocolHandlers = {
+   'http:': getHttpProtocolModuleFormat,
+   'https:': getHttpProtocolModuleFormat,
+   'node:'() { return 'builtin'; },
++  'electron:'() { return 'commonjs'; },
+ };
+ 
+ /**
+diff --git a/lib/internal/modules/esm/load.js b/lib/internal/modules/esm/load.js
+index 1178f06074ec8ec02a2e7b5cf8cbe7e68b72f809..d64d4452a50bc4469b2d2fcc3251b3df31cda6ec 100644
+--- a/lib/internal/modules/esm/load.js
++++ b/lib/internal/modules/esm/load.js
+@@ -116,6 +116,7 @@ function throwIfUnsupportedURLScheme(parsed, experimentalNetworkImports) {
+     protocol !== 'file:' &&
+     protocol !== 'data:' &&
+     protocol !== 'node:' &&
++    protocol !== 'electron:' &&
+     (
+       !experimentalNetworkImports ||
+       (
+@@ -124,7 +125,7 @@ function throwIfUnsupportedURLScheme(parsed, experimentalNetworkImports) {
+       )
+     )
+   ) {
+-    const schemes = ['file', 'data', 'node'];
++    const schemes = ['file', 'data', 'node', 'electron'];
+     if (experimentalNetworkImports) {
+       ArrayPrototypePush(schemes, 'https', 'http');
+     }
+diff --git a/lib/internal/modules/esm/resolve.js b/lib/internal/modules/esm/resolve.js
+index 2cac6f2d450fab014544d15439e51575f86ccb38..ce2d851da2577e6e99980eb75337f629b38fddbf 100644
+--- a/lib/internal/modules/esm/resolve.js
++++ b/lib/internal/modules/esm/resolve.js
+@@ -822,6 +822,8 @@ function parsePackageName(specifier, base) {
+   return { packageName, packageSubpath, isScoped };
+ }
+ 
++const electronSpecifiers = new SafeSet(['electron', 'electron/main', 'electron/common', 'electron/renderer']);
++
+ /**
+  * @param {string} specifier
+  * @param {string | URL | undefined} base
+@@ -834,6 +836,10 @@ function packageResolve(specifier, base, conditions) {
+     return new URL('node:' + specifier);
+   }
+ 
++  if (electronSpecifiers.has(specifier)) {
++    return new URL('electron:electron');
++  }
++
+   const { packageName, packageSubpath, isScoped } =
+     parsePackageName(specifier, base);
+ 
+diff --git a/lib/internal/modules/esm/translators.js b/lib/internal/modules/esm/translators.js
+index a425749e82acd7593c9fb1ceffedc119a4e416f2..1ceb89da21610c703f4a18be5888373c7feaa370 100644
+--- a/lib/internal/modules/esm/translators.js
++++ b/lib/internal/modules/esm/translators.js
+@@ -154,7 +154,7 @@ translators.set('commonjs', async function commonjsStrategy(url, source,
+ 
+   if (!cjsParse) await initCJSParse();
+   const { module, exportNames } = cjsPreparseModuleExports(filename);
+-  const namesWithDefault = exportNames.has('default') ?
++  const namesWithDefault = filename === 'electron' ? ['default', ...Object.keys(module.exports)] : exportNames.has('default') ?
+     [...exportNames] : ['default', ...exportNames];
+ 
+   return new ModuleWrap(url, undefined, namesWithDefault, function() {
+@@ -173,9 +173,9 @@ translators.set('commonjs', async function commonjsStrategy(url, source,
+       }
+     }
+ 
+-    for (const exportName of exportNames) {
+-      if (!ObjectPrototypeHasOwnProperty(exports, exportName) ||
+-          exportName === 'default')
++    for (const exportName of namesWithDefault) {
++      if (exportName === 'default' ||
++          !ObjectPrototypeHasOwnProperty(exports, exportName))
+         continue;
+       // We might trigger a getter -> dont fail.
+       let value;
+diff --git a/lib/internal/url.js b/lib/internal/url.js
+index 51688b8403076a328c2c62b6434fc310ee4f1ea7..36604c9de2179b5f6941dd9a7af66cdb03facd7f 100644
+--- a/lib/internal/url.js
++++ b/lib/internal/url.js
+@@ -1399,6 +1399,8 @@ function fileURLToPath(path) {
+     path = new URL(path);
+   else if (!isURL(path))
+     throw new ERR_INVALID_ARG_TYPE('path', ['string', 'URL'], path);
++  if (path.protocol === 'electron:')
++    return 'electron';
+   if (path.protocol !== 'file:')
+     throw new ERR_INVALID_URL_SCHEME('file');
+   return isWindows ? getPathFromURLWin32(path) : getPathFromURLPosix(path);
