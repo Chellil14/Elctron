@@ -1,0 +1,137 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jeremy Apthorp <nornagon@nornagon.net>
+Date: Wed, 15 Jan 2020 16:35:18 -0800
+Subject: add DidInstallConditionalFeatures
+
+This adds a hook on script context creation _after conditional features
+have been installed_. Electron uses this to run preload scripts and
+various other initialization. This is necessary because at the time
+DidCreateScriptContext is called, not all JS APIs are available in the
+context, which can cause some preload scripts to trip.
+
+diff --git a/content/public/renderer/render_frame_observer.h b/content/public/renderer/render_frame_observer.h
+index d1e9ad95891487b37e2e03cb2a220eb969e877ab..13bdc6cf7ba4221f0a3219975a0825eb62dd0b78 100644
+--- a/content/public/renderer/render_frame_observer.h
++++ b/content/public/renderer/render_frame_observer.h
+@@ -139,6 +139,8 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
+   virtual void DidHandleOnloadEvents() {}
+   virtual void DidCreateScriptContext(v8::Local<v8::Context> context,
+                                       int32_t world_id) {}
++  virtual void DidInstallConditionalFeatures(v8::Local<v8::Context> context,
++                                             int32_t world_id) {}
+   virtual void WillReleaseScriptContext(v8::Local<v8::Context> context,
+                                         int32_t world_id) {}
+   virtual void DidClearWindowObject() {}
+diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
+index 54368c4a6ae9e2fb40017ecb31228a035dacf4cb..dceea20dd2a53fa079da7263e3161e1bd86279fe 100644
+--- a/content/renderer/render_frame_impl.cc
++++ b/content/renderer/render_frame_impl.cc
+@@ -4474,6 +4474,12 @@ void RenderFrameImpl::DidCreateScriptContext(v8::Local<v8::Context> context,
+     observer.DidCreateScriptContext(context, world_id);
+ }
+ 
++void RenderFrameImpl::DidInstallConditionalFeatures(
++    v8::Local<v8::Context> context, int world_id) {
++  for (auto& observer : observers_)
++    observer.DidInstallConditionalFeatures(context, world_id);
++}
++
+ void RenderFrameImpl::WillReleaseScriptContext(v8::Local<v8::Context> context,
+                                                int world_id) {
+   for (auto& observer : observers_)
+diff --git a/content/renderer/render_frame_impl.h b/content/renderer/render_frame_impl.h
+index bbca34db538e7fcfa54a845485e4c3e93507b754..988dafcd1f22c7e74386308825556f71e1b69ff1 100644
+--- a/content/renderer/render_frame_impl.h
++++ b/content/renderer/render_frame_impl.h
+@@ -611,6 +611,8 @@ class CONTENT_EXPORT RenderFrameImpl
+   void DidObserveLayoutShift(double score, bool after_input_or_scroll) override;
+   void DidCreateScriptContext(v8::Local<v8::Context> context,
+                               int world_id) override;
++  void DidInstallConditionalFeatures(v8::Local<v8::Context> context,
++                                     int world_id) override;
+   void WillReleaseScriptContext(v8::Local<v8::Context> context,
+                                 int world_id) override;
+   void DidChangeScrollOffset() override;
+diff --git a/third_party/blink/public/web/web_local_frame_client.h b/third_party/blink/public/web/web_local_frame_client.h
+index cb4cd28c051c3ac4f97981e44636a6ea7d311c39..8eb2fd06f694c2c390427a0e981960f9292e9659 100644
+--- a/third_party/blink/public/web/web_local_frame_client.h
++++ b/third_party/blink/public/web/web_local_frame_client.h
+@@ -620,6 +620,9 @@ class BLINK_EXPORT WebLocalFrameClient {
+   virtual void DidCreateScriptContext(v8::Local<v8::Context>,
+                                       int32_t world_id) {}
+ 
++  virtual void DidInstallConditionalFeatures(v8::Local<v8::Context>,
++                                             int32_t world_id) {}
++
+   // WebKit is about to release its reference to a v8 context for a frame.
+   virtual void WillReleaseScriptContext(v8::Local<v8::Context>,
+                                         int32_t world_id) {}
+diff --git a/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc b/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc
+index fbd5c929b323ee9d943615ed8c890d869345165d..af11f266db8d626dfbba6f16d0a906e643e8c337 100644
+--- a/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc
++++ b/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc
+@@ -200,6 +200,7 @@ void LocalWindowProxy::Initialize() {
+   }
+ 
+   InstallConditionalFeatures();
++  GetFrame()->Client()->DidInstallConditionalFeatures(context, world_->GetWorldId());
+ 
+   if (World().IsMainWorld()) {
+     probe::DidCreateMainWorldContext(GetFrame());
+diff --git a/third_party/blink/renderer/core/frame/local_frame_client.h b/third_party/blink/renderer/core/frame/local_frame_client.h
+index 61acd17afbe3ea1a6c2e40687709deee6b767df5..0413dda58f6de06f2dcd112b912c124626b19f85 100644
+--- a/third_party/blink/renderer/core/frame/local_frame_client.h
++++ b/third_party/blink/renderer/core/frame/local_frame_client.h
+@@ -321,6 +321,8 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
+ 
+   virtual void DidCreateScriptContext(v8::Local<v8::Context>,
+                                       int32_t world_id) = 0;
++  virtual void DidInstallConditionalFeatures(v8::Local<v8::Context>,
++                                             int32_t world_id) = 0;
+   virtual void WillReleaseScriptContext(v8::Local<v8::Context>,
+                                         int32_t world_id) = 0;
+   virtual bool AllowScriptExtensions() = 0;
+diff --git a/third_party/blink/renderer/core/frame/local_frame_client_impl.cc b/third_party/blink/renderer/core/frame/local_frame_client_impl.cc
+index 65642d9cc3b021acb6b0be310db782514379f627..cd0a381fbe6dc478c8c0779c351270b5b4d818f9 100644
+--- a/third_party/blink/renderer/core/frame/local_frame_client_impl.cc
++++ b/third_party/blink/renderer/core/frame/local_frame_client_impl.cc
+@@ -282,6 +282,13 @@ void LocalFrameClientImpl::DidCreateScriptContext(
+     web_frame_->Client()->DidCreateScriptContext(context, world_id);
+ }
+ 
++void LocalFrameClientImpl::DidInstallConditionalFeatures(
++    v8::Local<v8::Context> context,
++    int32_t world_id) {
++  if (web_frame_->Client())
++    web_frame_->Client()->DidInstallConditionalFeatures(context, world_id);
++}
++
+ void LocalFrameClientImpl::WillReleaseScriptContext(
+     v8::Local<v8::Context> context,
+     int32_t world_id) {
+diff --git a/third_party/blink/renderer/core/frame/local_frame_client_impl.h b/third_party/blink/renderer/core/frame/local_frame_client_impl.h
+index ee4555b8ee7eab9b1ef7ef532fe94649f60c36b1..02b8bd5ce9579b4517f8188cfcb28f60012f6ce1 100644
+--- a/third_party/blink/renderer/core/frame/local_frame_client_impl.h
++++ b/third_party/blink/renderer/core/frame/local_frame_client_impl.h
+@@ -84,6 +84,8 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
+ 
+   void DidCreateScriptContext(v8::Local<v8::Context>,
+                               int32_t world_id) override;
++  void DidInstallConditionalFeatures(v8::Local<v8::Context>,
++                                     int32_t world_id) override;
+   void WillReleaseScriptContext(v8::Local<v8::Context>,
+                                 int32_t world_id) override;
+ 
+diff --git a/third_party/blink/renderer/core/loader/empty_clients.h b/third_party/blink/renderer/core/loader/empty_clients.h
+index 507d02dc496a2324274e12501cb9ff080a0ed401..abcff9a4020578ef435bfa7c0dc0f9d8330bfa6b 100644
+--- a/third_party/blink/renderer/core/loader/empty_clients.h
++++ b/third_party/blink/renderer/core/loader/empty_clients.h
+@@ -407,6 +407,8 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
+ 
+   void DidCreateScriptContext(v8::Local<v8::Context>,
+                               int32_t world_id) override {}
++  void DidInstallConditionalFeatures(v8::Local<v8::Context>,
++                                     int32_t world_id) override {}
+   void WillReleaseScriptContext(v8::Local<v8::Context>,
+                                 int32_t world_id) override {}
+   bool AllowScriptExtensions() override { return false; }
