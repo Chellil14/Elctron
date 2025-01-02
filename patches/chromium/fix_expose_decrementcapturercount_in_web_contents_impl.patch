@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shelley Vohr <shelley.vohr@gmail.com>
+Date: Fri, 9 Apr 2021 19:30:01 +0200
+Subject: fix: expose DecrementCapturerCount in web_contents_impl
+
+This was made private in https://chromium-review.googlesource.com/c/chromium/src/+/2807829 but
+we invoke it in order to expose contents.decrementCapturerCount([stayHidden, stayAwake])
+to users. We should try to upstream this.
+
+diff --git a/content/browser/web_contents/web_contents_impl.h b/content/browser/web_contents/web_contents_impl.h
+index 9b1c762c66692d552aaec7c2f24b9104cd623fea..f5de73704cfcaa746ddf6970c3bde72e63f29c71 100644
+--- a/content/browser/web_contents/web_contents_impl.h
++++ b/content/browser/web_contents/web_contents_impl.h
+@@ -1768,10 +1768,12 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
+   // outermost frame trees in this WebContents.
+   std::vector<RenderFrameHostImpl*> GetOutermostMainFrames();
+ 
++ public:
+   // Called when the base::ScopedClosureRunner returned by
+   // IncrementCapturerCount() is destructed.
+-  void DecrementCapturerCount(bool stay_hidden, bool stay_awake);
++  void DecrementCapturerCount(bool stay_hidden, bool stay_awake) override;
+ 
++ private:
+   // Calculates the PageVisibilityState for |visibility|, taking the capturing
+   // state into account.
+   PageVisibilityState CalculatePageVisibilityState(Visibility visibility) const;
+diff --git a/content/public/browser/web_contents.h b/content/public/browser/web_contents.h
+index 4d6ba5102935330abc6f2354f4c442ad3a045e09..0afdb3ef00f89cbb2a79b66ed84b829bbbd98ac7 100644
+--- a/content/public/browser/web_contents.h
++++ b/content/public/browser/web_contents.h
+@@ -630,6 +630,8 @@ class WebContents : public PageNavigator,
+       bool stay_hidden,
+       bool stay_awake) WARN_UNUSED_RESULT = 0;
+ 
++  virtual void DecrementCapturerCount(bool stay_hidden, bool stay_awake) = 0;
++
+   // Getter for the capture handle, which allows a captured application to
+   // opt-in to exposing information to its capturer(s).
+   virtual const blink::mojom::CaptureHandleConfig& GetCaptureHandleConfig() = 0;

@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: deepak1556 <hop2deep@gmail.com>
+Date: Sat, 24 Apr 2021 18:07:09 -0700
+Subject: web_contents.patch
+
+This allows overriding the RenderViewHostDelegateView of a WebContents, which
+is needed for OSR.
+
+Originally landed in https://github.com/electron/libchromiumcontent/pull/226.
+
+diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
+index 0d18a4b79f72a8b8ad93aecb1ee4fe49a2699aaf..ffffc4521b9707956a063819a726eac92e87c1aa 100644
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -2926,6 +2926,12 @@ void WebContentsImpl::Init(const WebContents::CreateParams& params) {
+   frame_tree_.Init(site_instance.get(), params.renderer_initiated_creation,
+                    params.main_frame_name);
+ 
++  if (params.view && params.delegate_view) {
++    view_.reset(params.view);
++    render_view_host_delegate_view_ = params.delegate_view;
++  }
++
++  if (!view_) {
+   WebContentsViewDelegate* delegate =
+       GetContentClient()->browser()->GetWebContentsViewDelegate(this);
+ 
+@@ -2936,6 +2942,7 @@ void WebContentsImpl::Init(const WebContents::CreateParams& params) {
+     view_.reset(CreateWebContentsView(this, delegate,
+                                       &render_view_host_delegate_view_));
+   }
++  }  // !view_
+   CHECK(render_view_host_delegate_view_);
+   CHECK(view_.get());
+ 
+diff --git a/content/public/browser/web_contents.h b/content/public/browser/web_contents.h
+index 43105b1caf9a3ee81ae0ecf5b9f13165b7d72222..4d6ba5102935330abc6f2354f4c442ad3a045e09 100644
+--- a/content/public/browser/web_contents.h
++++ b/content/public/browser/web_contents.h
+@@ -85,10 +85,13 @@ class BrowserContext;
+ class BrowserPluginGuestDelegate;
+ class RenderFrameHost;
+ class RenderViewHost;
++class RenderViewHostDelegateView;
+ class RenderWidgetHostView;
++class RenderWidgetHostViewBase;
+ class ScreenOrientationDelegate;
+ class SiteInstance;
+ class WebContentsDelegate;
++class WebContentsView;
+ class WebUI;
+ struct DropData;
+ struct MHTMLGenerationParams;
+@@ -221,6 +224,10 @@ class WebContents : public PageNavigator,
+     // Sandboxing flags set on the new WebContents.
+     network::mojom::WebSandboxFlags starting_sandbox_flags;
+ 
++    // Optionally specify the view and delegate view.
++    content::WebContentsView* view = nullptr;
++    content::RenderViewHostDelegateView* delegate_view = nullptr;
++
+     // Value used to set the last time the WebContents was made active, this is
+     // the value that'll be returned by GetLastActiveTime(). If this is left
+     // default initialized then the value is not passed on to the WebContents
